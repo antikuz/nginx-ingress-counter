@@ -64,6 +64,14 @@ type nginxLog struct {
 	Upstream_status     string `json:"upstream_status,omitempty"`
 }
 
+func counterWriter(logs []nginxLog) {
+	connectionCounter.mutex.Lock()
+	for _, value := range logs {
+		connectionCounter.connectionMap[value.Remote_addr]++
+	}
+	connectionCounter.mutex.Unlock()
+}
+
 func watchPodLogs(ctx context.Context, podName string, containerName string, logChannel chan string) {
 	count := int64(0) // only new lines read
 	podLogOptions := corev1.PodLogOptions{
@@ -235,6 +243,8 @@ func main() {
 	go watchPods(ctx, logChannel)
 	go startWebServer()
 	logger.Sugar().Debug("Webserver started")
+
+	cache := []nginxLog{}
 	for {
 		select {
 		case log := <-logChannel:
@@ -247,9 +257,11 @@ func main() {
 			if err != nil {
 				logger.Sugar().Errorf("Failed to unmarshal text, due to err: %v.\nText:%s", err, log)
 			} else {
-				connectionCounter.mutex.Lock()
-				connectionCounter.connectionMap[loggedRequest.Remote_addr]++
-				connectionCounter.mutex.Unlock()
+				cache = append(cache, *loggedRequest)
+				if len(cache) == 100 {
+					go counterWriter(cache)
+					cache = nil
+				}
 			}
 			logger.Sugar().Debugf("%v", loggedRequest)
 		case <-ctx.Done():
