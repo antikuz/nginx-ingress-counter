@@ -83,13 +83,11 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 	}
 
 	podLogRequest := clientset.CoreV1().Pods(namespace).GetLogs(podName, &podLogOptions)
-
-logLoop:
 	for {
 		stream, err := podLogRequest.Stream(ctx)
 		if err != nil {
 			logger.Sugar().Errorf("Unable to get %s/%s log stream, due to err: %v", podName, containerName, err)
-			break logLoop
+			break
 		}
 		defer stream.Close()
 
@@ -98,7 +96,8 @@ logLoop:
 		for reader.Scan() {
 			select {
 			case <-ctx.Done():
-				break logLoop
+				logger.Sugar().Debug("Log scanner %s/%s close, due to get ctx.Done, : %v")
+				return
 			default:
 				line := reader.Text()
 				logChannel <- line
@@ -179,13 +178,13 @@ func watchPods(ctx context.Context, logChannel chan string) {
 
 func exposeMetrics(w http.ResponseWriter, req *http.Request) {
 	var buf bytes.Buffer
-	
+
 	buf.WriteString("# HELP nginx_connections_by_remote_addr Client connections by remote_addr\n")
 	buf.WriteString("# TYPE nginx_connections_by_remote_addr counter\n")
-	
+
 	connectionCounter.mutex.Lock()
 	defer connectionCounter.mutex.Unlock()
-	
+
 	for ip, count := range connectionCounter.connectionMap {
 		buf.WriteString(fmt.Sprintf("nginx_connections_by_remote_addr{remote_addr=\"%s\"} %d\n", ip, count))
 	}
