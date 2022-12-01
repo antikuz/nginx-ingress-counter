@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -176,14 +177,19 @@ func watchPods(ctx context.Context, logChannel chan string) {
 }
 
 func exposeMetrics(w http.ResponseWriter, req *http.Request) {
-	response := "# HELP nginx_connections_by_remote_addr Client connections by remote_addr\n"
-	response += "# TYPE nginx_connections_by_remote_addr counter\n"
+	var buf bytes.Buffer
+	
+	buf.WriteString("# HELP nginx_connections_by_remote_addr Client connections by remote_addr\n")
+	buf.WriteString("# TYPE nginx_connections_by_remote_addr counter\n")
+	
 	connectionCounter.mutex.Lock()
 	defer connectionCounter.mutex.Unlock()
+	
 	for ip, count := range connectionCounter.connectionMap {
-		response += fmt.Sprintf("nginx_connections_by_remote_addr{remote_addr=\"%s\"} %d\n", ip, count)
+		buf.WriteString(fmt.Sprintf("nginx_connections_by_remote_addr{remote_addr=\"%s\"} %d\n", ip, count))
 	}
-	_, err := fmt.Fprint(w, response)
+
+	_, err := fmt.Fprint(w, buf.String())
 	if err != nil {
 		logger.Sugar().Errorf("Can't expose metrics, due to err: %v", err)
 	}
