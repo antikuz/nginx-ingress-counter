@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -195,9 +196,18 @@ func exposeMetrics(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func stats(w http.ResponseWriter, req *http.Request) {
+	response := fmt.Sprintf("goroutines %d\n", runtime.NumGoroutine())
+	_, err := fmt.Fprint(w, response)
+	if err != nil {
+		logger.Sugar().Errorf("Can't expose statistic, due to err: %v", err)
+	}
+}
+
+//web server to expose prometheus-like metrics
 func startWebServer() {
-	//web server to expose prometheus-like metrics
 	http.HandleFunc("/metrics", exposeMetrics)
+	http.HandleFunc("/stats", stats)
 	logger.Sugar().Fatal(http.ListenAndServe(":8080", nil))
 }
 
