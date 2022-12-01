@@ -216,7 +216,13 @@ func main() {
 	} else {
 		logger = zap.Must(zap.NewProduction())
 	}
-	defer logger.Sync() // flushes buffer, if any
+
+	// flushes buffer before exit, if any
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			logger.Sugar().Fatalf("Error when logger sync before exit: %v", err)
+		}
+	}()
 
 	connectionCounter = &connectionCounterStruct{
 		mutex:         sync.Mutex{},
