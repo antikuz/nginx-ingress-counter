@@ -37,7 +37,7 @@ var (
 
 type connectionCounterStruct struct {
 	mutex         sync.Mutex
-	connectionMap map[string]int
+	connectionMap map[string]float64
 }
 
 type nginxLog struct {
@@ -186,7 +186,7 @@ func exposeMetrics(w http.ResponseWriter, req *http.Request) {
 	defer connectionCounter.mutex.Unlock()
 
 	for ip, count := range connectionCounter.connectionMap {
-		buf.WriteString(fmt.Sprintf("nginx_connections_by_remote_addr{remote_addr=\"%s\"} %d\n", ip, count))
+		buf.WriteString(fmt.Sprintf("nginx_connections_by_remote_addr{remote_addr=\"%s\"} %м\n", ip, count))
 	}
 
 	_, err := fmt.Fprint(w, buf.String())
@@ -226,7 +226,7 @@ func main() {
 
 	connectionCounter = &connectionCounterStruct{
 		mutex:         sync.Mutex{},
-		connectionMap: map[string]int{},
+		connectionMap: map[string]float64{},
 	}
 
 	logChannel := make(chan string)
