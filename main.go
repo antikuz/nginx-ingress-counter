@@ -245,7 +245,7 @@ func main() {
 		connectionMap: map[string]float64{},
 	}
 
-	logChannel := make(chan string)
+	logChannel := make(chan string, 100)
 	ctx, cancel := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGHUP,
