@@ -103,7 +103,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		for reader.Scan() {
 			select {
 			case <-ctx.Done():
-				logger.Sugar().Debug("Log scanner %s/%s close, due to get ctx.Done, : %v")
+				logger.Sugar().Infof("Log scanner %s/%s get ctx.Done, closed, due to ", podName, containerName)
 				if err = stream.Close(); err != nil {
 					logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
 				}
@@ -308,7 +308,7 @@ func main() {
 		case <-time.After(1 * time.Minute):
 			logger.Sugar().Error("Dont get message for 1 minute, maybe stuck. Exit to restart")
 			cancel()
-			os.Exit(1)
+			return
 		}
 	}
 }
