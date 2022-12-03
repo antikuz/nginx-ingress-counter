@@ -18,6 +18,8 @@ jobs:
           go-version: 1.18
       - name: Lint
         uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout 3m0s
 
   build:
     strategy:
