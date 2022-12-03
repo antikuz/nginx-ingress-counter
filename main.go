@@ -79,7 +79,7 @@ func counterWriter(logs []nginxLog) {
 func watchPodLogs(ctx context.Context, podName string, containerName string, logChannel chan string) {
 	wg.Add(1)
 	podsWatched[podName] = true
-	
+
 	defer wg.Done()
 	defer logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
 	defer delete(podsWatched, podName)
@@ -91,8 +91,8 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		TailLines: &count,
 	}
 
-	podLogRequest := clientset.CoreV1().Pods(namespace).GetLogs(podName, &podLogOptions)
 	for {
+		podLogRequest := clientset.CoreV1().Pods(namespace).GetLogs(podName, &podLogOptions)
 		stream, err := podLogRequest.Stream(ctx)
 		if err != nil {
 			logger.Sugar().Errorf("Unable to get %s/%s log stream, due to err: %v", podName, containerName, err)
@@ -103,14 +103,13 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		for reader.Scan() {
 			select {
 			case <-ctx.Done():
-				logger.Sugar().Infof("Log scanner %s/%s get ctx.Done, closed, due to ", podName, containerName)
+				logger.Sugar().Infof("Log scanner %s/%s closed due context cancel", podName, containerName)
 				if err = stream.Close(); err != nil {
-					logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
+					logger.Sugar().Errorf("Log scanner %s/%s get error while stream close: %v", podName, containerName, err)
 				}
 				return
 			default:
-				line := reader.Text()
-				logChannel <- line
+				logChannel <- reader.Text()
 			}
 		}
 
@@ -254,7 +253,6 @@ func main() {
 		syscall.SIGQUIT,
 	)
 
-	
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err.Error())
@@ -305,8 +303,8 @@ func main() {
 		case <-ctx.Done():
 			return
 		// TODO find the cause of the stuck
-		case <-time.After(1 * time.Minute):
-			logger.Sugar().Error("Dont get message for 1 minute, maybe stuck. Exit to restart")
+		case <-time.After(2 * time.Minute):
+			logger.Sugar().Error("Dont get message for 2 minutes, maybe stuck. Exit to restart")
 			cancel()
 			return
 		}
