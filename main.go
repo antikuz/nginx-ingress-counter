@@ -25,6 +25,7 @@ import (
 
 var (
 	logger *zap.Logger
+	wg     *sync.WaitGroup
 
 	clientset      *kubernetes.Clientset
 	namespace      = os.Getenv("INGRESSNAMESPACE")
@@ -76,10 +77,13 @@ func counterWriter(logs []nginxLog) {
 }
 
 func watchPodLogs(ctx context.Context, podName string, containerName string, logChannel chan string) {
+	wg.Add(1)
 	podsWatched[podName] = true
+	
+	defer wg.Done()
 	defer logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
 	defer delete(podsWatched, podName)
-	
+
 	count := int64(0) // only new lines read
 	podLogOptions := corev1.PodLogOptions{
 		Container: containerName,
@@ -162,6 +166,9 @@ func podEventProcessing(ctx context.Context, event watch.Event, pod *corev1.Pod,
 
 // watch for new created pods and add to logging
 func watchPods(ctx context.Context, logChannel chan string) {
+	wg.Add(1)
+	defer wg.Done()
+
 	watcher, err := clientset.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{})
 	if err != nil {
 		logger.Sugar().Fatalf("cannot create Pod event watcher, due to err: %v", err)
@@ -224,6 +231,8 @@ func main() {
 		logger = zap.Must(zap.NewProduction())
 	}
 
+	wg = &sync.WaitGroup{}
+	defer wg.Wait()
 	// flushes buffer before exit, if any
 	defer func() {
 		if err := logger.Sync(); err != nil {
@@ -237,7 +246,7 @@ func main() {
 	}
 
 	logChannel := make(chan string)
-	ctx, _ := signal.NotifyContext(
+	ctx, cancel := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGHUP,
 		syscall.SIGINT,
@@ -245,6 +254,7 @@ func main() {
 		syscall.SIGQUIT,
 	)
 
+	
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err.Error())
@@ -297,6 +307,7 @@ func main() {
 		// TODO find the cause of the stuck
 		case <-time.After(1 * time.Minute):
 			logger.Sugar().Error("Dont get message for 1 minute, maybe stuck. Exit to restart")
+			cancel()
 			os.Exit(1)
 		}
 	}
