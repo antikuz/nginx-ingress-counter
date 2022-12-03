@@ -76,6 +76,10 @@ func counterWriter(logs []nginxLog) {
 }
 
 func watchPodLogs(ctx context.Context, podName string, containerName string, logChannel chan string) {
+	podsWatched[podName] = true
+	defer logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
+	defer delete(podsWatched, podName)
+	
 	count := int64(0) // only new lines read
 	podLogOptions := corev1.PodLogOptions{
 		Container: containerName,
@@ -88,15 +92,17 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		stream, err := podLogRequest.Stream(ctx)
 		if err != nil {
 			logger.Sugar().Errorf("Unable to get %s/%s log stream, due to err: %v", podName, containerName, err)
-			break
+			return
 		}
 
-		podsWatched[podName] = true
 		reader := bufio.NewScanner(stream)
 		for reader.Scan() {
 			select {
 			case <-ctx.Done():
 				logger.Sugar().Debug("Log scanner %s/%s close, due to get ctx.Done, : %v")
+				if err = stream.Close(); err != nil {
+					logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
+				}
 				return
 			default:
 				line := reader.Text()
@@ -104,14 +110,14 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 			}
 		}
 
-		err = reader.Err()
-		if err != nil {
-			logger.Sugar().Errorf("Log scanner %s/%s get error: %v", podName, containerName, err)
+		if err = reader.Err(); err != nil {
+			logger.Sugar().Errorf("Log scanner %s/%s get error from bufio.NewScanner: %v", podName, containerName, err)
 		}
-		stream.Close()
+
+		if err = stream.Close(); err != nil {
+			logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
+		}
 	}
-	logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
-	delete(podsWatched, podName)
 }
 
 func isPodLogWatched(podName string) bool {
