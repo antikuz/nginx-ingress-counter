@@ -90,7 +90,6 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 			logger.Sugar().Errorf("Unable to get %s/%s log stream, due to err: %v", podName, containerName, err)
 			break
 		}
-		defer stream.Close()
 
 		podsWatched[podName] = true
 		reader := bufio.NewScanner(stream)
@@ -109,6 +108,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		if err != nil {
 			logger.Sugar().Errorf("Log scanner %s/%s get error: %v", podName, containerName, err)
 		}
+		stream.Close()
 	}
 	logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
 	delete(podsWatched, podName)
@@ -270,6 +270,7 @@ func main() {
 	for {
 		select {
 		case log := <-logChannel:
+			logger.Sugar().Debugf("Get string: %s", log)
 			if !strings.Contains(log, "{") {
 				continue
 			}
@@ -285,7 +286,6 @@ func main() {
 					cache = nil
 				}
 			}
-			logger.Sugar().Debugf("%v", loggedRequest)
 		case <-ctx.Done():
 			return
 		// TODO find the cause of the stuck
