@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -186,7 +187,7 @@ func exposeMetrics(w http.ResponseWriter, req *http.Request) {
 	defer connectionCounter.mutex.Unlock()
 
 	for ip, count := range connectionCounter.connectionMap {
-		buf.WriteString(fmt.Sprintf("nginx_connections_by_remote_addr{remote_addr=\"%s\"} %м\n", ip, count))
+		buf.WriteString(fmt.Sprintf("nginx_connections_by_remote_addr{remote_addr=\"%s\"} %v\n", ip, count))
 	}
 
 	_, err := fmt.Fprint(w, buf.String())
@@ -287,6 +288,10 @@ func main() {
 			logger.Sugar().Debugf("%v", loggedRequest)
 		case <-ctx.Done():
 			return
+		// TODO find the cause of the stuck
+		case <-time.After(1 * time.Minute):
+			logger.Sugar().Error("Dont get message for 1 minute, maybe stuck. Exit to restart")
+			os.Exit(1)
 		}
 	}
 }
