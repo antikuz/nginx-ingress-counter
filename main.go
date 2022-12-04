@@ -232,12 +232,6 @@ func main() {
 
 	wg = &sync.WaitGroup{}
 	defer wg.Wait()
-	// flushes buffer before exit, if any
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			logger.Sugar().Fatalf("Error when logger sync before exit: %v", err)
-		}
-	}()
 
 	connectionCounter = &connectionCounterStruct{
 		mutex:         sync.Mutex{},
