@@ -69,10 +69,10 @@ type nginxLog struct {
 
 func counterWriter(logs []string) {
 	connectionCounter.mutex.Lock()
+	defer connectionCounter.mutex.Unlock()
 	for _, remote_addr := range logs {
 		connectionCounter.connectionMap[remote_addr]++
 	}
-	connectionCounter.mutex.Unlock()
 }
 
 func logParser(ctx context.Context, logChannel chan string) {
@@ -234,7 +234,10 @@ func exposeMetrics(w http.ResponseWriter, req *http.Request) {
 }
 
 func stats(w http.ResponseWriter, req *http.Request) {
+	connectionCounter.mutex.Lock()
+	defer connectionCounter.mutex.Unlock()
 	response := fmt.Sprintf("goroutines %d\n", runtime.NumGoroutine())
+	response += fmt.Sprintf("counter map lenght %d\n", len(connectionCounter.connectionMap))
 	_, err := fmt.Fprint(w, response)
 	if err != nil {
 		logger.Sugar().Errorf("Can't expose statistic, due to err: %v", err)
