@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -126,6 +127,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		}
 
 		reader := bufio.NewScanner(stream)
+	readerLoop:
 		for reader.Scan() {
 			select {
 			case <-ctx.Done():
@@ -134,8 +136,11 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 					logger.Sugar().Errorf("Log scanner %s/%s get error while stream close: %v", podName, containerName, err)
 				}
 				return
-			default:
-				logChannel <- reader.Text()
+			case <-time.After(1 * time.Minute):
+				logger.Sugar().Infof("Log scanner %s/%s timeout text 1 minute, try recreate log request", podName, containerName)
+				break readerLoop
+			case logChannel <- reader.Text():
+				continue
 			}
 		}
 
@@ -215,7 +220,7 @@ func watchPods(ctx context.Context, logChannel chan string) {
 		if err != nil {
 			logger.Sugar().Fatalf("cannot create Pod event watcher, due to err: %v", err)
 		}
-		
+
 		if err = watchEventListener(ctx, watcher, logChannel); err != nil {
 			watcher.Stop()
 			return
@@ -246,7 +251,7 @@ func stats(w http.ResponseWriter, req *http.Request) {
 	connectionCounter.mutex.Lock()
 	defer connectionCounter.mutex.Unlock()
 	response := fmt.Sprintf("goroutines %d\n", runtime.NumGoroutine())
-	response += fmt.Sprintf("counter map lenght %d\n", len(connectionCounter.connectionMap))
+	response += fmt.Sprintf("counter map length %d\n", len(connectionCounter.connectionMap))
 	_, err := fmt.Fprint(w, response)
 	if err != nil {
 		logger.Sugar().Errorf("Can't expose statistic, due to err: %v", err)
