@@ -109,7 +109,6 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 	podsWatched[podName] = true
 	defer delete(podsWatched, podName)
 	defer logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
-	
 
 	count := int64(0) // only new lines read
 	podLogOptions := corev1.PodLogOptions{
@@ -190,25 +189,34 @@ func podEventProcessing(ctx context.Context, event watch.Event, pod *corev1.Pod,
 	}
 }
 
+func watchEventListener(ctx context.Context, watcher watch.Interface, logChannel chan string) error {
+	for {
+		select {
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				return nil
+			}
+
+			if pod, ok := event.Object.(*corev1.Pod); ok {
+				podEventProcessing(ctx, event, pod, logChannel)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
 // watch for new created pods and add to logging
 func watchPods(ctx context.Context, logChannel chan string) {
 	defer wg.Done()
 
-	watcher, err := clientset.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{})
-	if err != nil {
-		logger.Sugar().Fatalf("cannot create Pod event watcher, due to err: %v", err)
-	}
-
 	for {
-		select {
-		case event := <-watcher.ResultChan():
-			pod, ok := event.Object.(*corev1.Pod)
-			if !ok {
-				continue
-			}
-
-			podEventProcessing(ctx, event, pod, logChannel)
-		case <-ctx.Done():
+		watcher, err := clientset.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{})
+		if err != nil {
+			logger.Sugar().Fatalf("cannot create Pod event watcher, due to err: %v", err)
+		}
+		
+		if err = watchEventListener(ctx, watcher, logChannel); err != nil {
 			watcher.Stop()
 			return
 		}
