@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -127,7 +126,6 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		}
 
 		reader := bufio.NewScanner(stream)
-	readerLoop:
 		for reader.Scan() {
 			select {
 			case <-ctx.Done():
@@ -136,11 +134,14 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 					logger.Sugar().Errorf("Log scanner %s/%s get error while stream close: %v", podName, containerName, err)
 				}
 				return
-			case <-time.After(1 * time.Minute):
-				logger.Sugar().Infof("Log scanner %s/%s timeout text 1 minute, try recreate log request", podName, containerName)
-				break readerLoop
-			case logChannel <- reader.Text():
-				continue
+			default:
+				text := reader.Text()
+				if text != "" {
+					logChannel <- text
+				} else {
+					logger.Sugar().Infof("Log scanner %s/%s get empty text, maybe stuck. Try recreate request stream", podName, containerName)
+					break
+				}
 			}
 		}
 
