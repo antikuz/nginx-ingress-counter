@@ -24,7 +24,7 @@ import (
 
 var (
 	logger *zap.Logger
-	wg     *sync.WaitGroup
+	wg     sync.WaitGroup
 
 	clientset      *kubernetes.Clientset
 	namespace      = os.Getenv("INGRESSNAMESPACE")
@@ -76,7 +76,6 @@ func counterWriter(logs []string) {
 }
 
 func logParser(ctx context.Context, logChannel chan string) {
-	wg.Add(1)
 	defer wg.Done()
 
 	cache := []string{}
@@ -105,12 +104,11 @@ func logParser(ctx context.Context, logChannel chan string) {
 }
 
 func watchPodLogs(ctx context.Context, podName string, containerName string, logChannel chan string) {
-	wg.Add(1)
-	podsWatched[podName] = true
-
 	defer wg.Done()
-	defer logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
+	podsWatched[podName] = true
 	defer delete(podsWatched, podName)
+	defer logger.Sugar().Infof("Pod deleted %s/%s, remove from watch", podName, containerName)
+	
 
 	count := int64(0) // only new lines read
 	podLogOptions := corev1.PodLogOptions{
@@ -193,7 +191,6 @@ func podEventProcessing(ctx context.Context, event watch.Event, pod *corev1.Pod,
 
 // watch for new created pods and add to logging
 func watchPods(ctx context.Context, logChannel chan string) {
-	wg.Add(1)
 	defer wg.Done()
 
 	watcher, err := clientset.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{})
@@ -258,8 +255,7 @@ func main() {
 		logger = zap.Must(zap.NewProduction())
 	}
 
-	wg = &sync.WaitGroup{}
-	defer wg.Wait()
+	wg = sync.WaitGroup{}
 
 	connectionCounter = &connectionCounterStruct{
 		mutex:         sync.Mutex{},
@@ -294,10 +290,12 @@ func main() {
 	for _, pod := range podList.Items {
 		if strings.Contains(pod.Name, podIngressName) {
 			logger.Sugar().Infof("Found pod: \"%s\", add to watching logs", pod.Name)
+			wg.Add(1)
 			go watchPodLogs(ctx, pod.Name, pod.Spec.Containers[0].Name, logChannel)
 		}
 	}
 
+	wg.Add(3)
 	go watchPods(ctx, logChannel)
 	go logParser(ctx, logChannel)
 	go logParser(ctx, logChannel)
