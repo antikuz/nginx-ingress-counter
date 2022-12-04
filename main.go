@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -74,6 +73,35 @@ func counterWriter(logs []nginxLog) {
 		connectionCounter.connectionMap[value.Remote_addr]++
 	}
 	connectionCounter.mutex.Unlock()
+}
+
+func logParser(ctx context.Context, logChannel chan string) {
+	wg.Add(1)
+	defer wg.Done()
+
+	cache := []nginxLog{}
+	for {
+		select {
+		case log := <-logChannel:
+			logger.Sugar().Debugf("Get string: %s", log)
+			if !strings.Contains(log, "{") {
+				continue
+			}
+
+			loggedRequest := &nginxLog{}
+			if err := json.Unmarshal([]byte(log), loggedRequest); err != nil {
+				logger.Sugar().Errorf("Failed to unmarshal text, due to err: %v.\nText:%s", err, log)
+			} else {
+				cache = append(cache, *loggedRequest)
+				if len(cache) == 100 {
+					go counterWriter(cache)
+					cache = nil
+				}
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func watchPodLogs(ctx context.Context, podName string, containerName string, logChannel chan string) {
@@ -239,7 +267,7 @@ func main() {
 	}
 
 	logChannel := make(chan string)
-	ctx, cancel := signal.NotifyContext(
+	ctx, _ := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGHUP,
 		syscall.SIGINT,
@@ -271,36 +299,10 @@ func main() {
 	}
 
 	go watchPods(ctx, logChannel)
+	go logParser(ctx, logChannel)
+	go logParser(ctx, logChannel)
 	go startWebServer()
 	logger.Sugar().Debug("Webserver started")
 
-	cache := []nginxLog{}
-	for {
-		select {
-		case log := <-logChannel:
-			logger.Sugar().Debugf("Get string: %s", log)
-			if !strings.Contains(log, "{") {
-				continue
-			}
-
-			loggedRequest := &nginxLog{}
-			err = json.Unmarshal([]byte(log), loggedRequest)
-			if err != nil {
-				logger.Sugar().Errorf("Failed to unmarshal text, due to err: %v.\nText:%s", err, log)
-			} else {
-				cache = append(cache, *loggedRequest)
-				if len(cache) == 100 {
-					go counterWriter(cache)
-					cache = nil
-				}
-			}
-		case <-ctx.Done():
-			return
-		// TODO find the cause of the stuck
-		case <-time.After(2 * time.Minute):
-			logger.Sugar().Error("Dont get message for 2 minutes, maybe stuck. Exit to restart")
-			cancel()
-			return
-		}
-	}
+	wg.Wait()
 }
