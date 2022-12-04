@@ -67,10 +67,10 @@ type nginxLog struct {
 	Upstream_status     string `json:"upstream_status,omitempty"`
 }
 
-func counterWriter(logs []nginxLog) {
+func counterWriter(logs []string) {
 	connectionCounter.mutex.Lock()
-	for _, value := range logs {
-		connectionCounter.connectionMap[value.Remote_addr]++
+	for _, remote_addr := range logs {
+		connectionCounter.connectionMap[remote_addr]++
 	}
 	connectionCounter.mutex.Unlock()
 }
@@ -79,7 +79,7 @@ func logParser(ctx context.Context, logChannel chan string) {
 	wg.Add(1)
 	defer wg.Done()
 
-	cache := []nginxLog{}
+	cache := []string{}
 	for {
 		select {
 		case log := <-logChannel:
@@ -92,7 +92,7 @@ func logParser(ctx context.Context, logChannel chan string) {
 			if err := json.Unmarshal([]byte(log), loggedRequest); err != nil {
 				logger.Sugar().Errorf("Failed to unmarshal text, due to err: %v.\nText:%s", err, log)
 			} else {
-				cache = append(cache, *loggedRequest)
+				cache = append(cache, loggedRequest.Remote_addr)
 				if len(cache) == 100 {
 					go counterWriter(cache)
 					cache = nil
