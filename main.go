@@ -136,12 +136,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 				return
 			default:
 				text := reader.Text()
-				if text != "" {
-					logChannel <- text
-				} else {
-					logger.Sugar().Infof("Log scanner %s/%s get empty text, maybe stuck. Try recreate request stream", podName, containerName)
-					break
-				}
+				logChannel <- text
 			}
 		}
 
