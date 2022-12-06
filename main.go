@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -118,7 +117,6 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		TailLines: &count,
 	}
 
-	var timeout <-chan time.Time
 	for {
 		podLogRequest := clientset.CoreV1().Pods(namespace).GetLogs(podName, &podLogOptions)
 		stream, err := podLogRequest.Stream(ctx)
@@ -128,15 +126,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		}
 
 		reader := bufio.NewScanner(stream)
-		line := make(chan string)
-	readerLoop:
 		for reader.Scan() {
-			timeout = time.After(1 * time.Minute)
-			
-			go func() {
-				line <- reader.Text()
-			}()
-
 			select {
 			case <-ctx.Done():
 				logger.Sugar().Infof("Log scanner %s/%s closed due context cancel", podName, containerName)
@@ -144,13 +134,9 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 					logger.Sugar().Errorf("Log scanner %s/%s get error while stream close: %v", podName, containerName, err)
 				}
 				return
-			case <-timeout:
-				logger.Sugar().Infof("Log scanner %s/%s timeout read logs, break loop and try connect again", podName, containerName)
-				break readerLoop
-			case text := <- line:
+			default:
+				text := reader.Text()
 				logChannel <- text
-				timeout = nil
-				continue
 			}
 		}
 
