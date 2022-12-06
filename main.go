@@ -128,10 +128,15 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		}
 
 		reader := bufio.NewScanner(stream)
-
+		line := make(chan string)
 	readerLoop:
 		for reader.Scan() {
 			timeout = time.After(1 * time.Minute)
+			
+			go func() {
+				line <- reader.Text()
+			}()
+
 			select {
 			case <-ctx.Done():
 				logger.Sugar().Infof("Log scanner %s/%s closed due context cancel", podName, containerName)
@@ -142,7 +147,9 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 			case <-timeout:
 				logger.Sugar().Infof("Log scanner %s/%s timeout read logs, break loop and try connect again", podName, containerName)
 				break readerLoop
-			case logChannel <- reader.Text():
+			case text := <- line:
+				logChannel <- text
+				timeout = nil
 				continue
 			}
 		}
