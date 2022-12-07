@@ -145,7 +145,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 					}
 					break readerLoop
 				}
-				logChannel <- text
+				logChannel <- strings.TrimSpace(text)
 			}
 		}
 
