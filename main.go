@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -151,6 +152,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 		if err = stream.Close(); err != nil {
 			logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
 		}
+		time.Sleep(1 * time.Second)
 	}
 }
 
