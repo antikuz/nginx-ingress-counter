@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -127,9 +126,8 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 			return
 		}
 
-		reader := bufio.NewReader(stream)
-	readerLoop:
-		for {
+		reader := bufio.NewScanner(stream)
+		for reader.Scan() {
 			select {
 			case <-ctx.Done():
 				logger.Sugar().Infof("Log scanner %s/%s closed due context cancel", podName, containerName)
@@ -138,14 +136,8 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 				}
 				return
 			default:
-				text, err := reader.ReadString('\n')
-				if err != nil {
-					if err != io.EOF {
-						logger.Sugar().Errorf("Log scanner %s/%s get error while reader read string: %v", podName, containerName, err)
-					}
-					break readerLoop
-				}
-				logChannel <- strings.TrimSpace(text)
+				text := reader.Text()
+				logChannel <- text
 			}
 		}
 
