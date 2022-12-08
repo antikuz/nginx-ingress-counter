@@ -118,6 +118,7 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 	}
 
 	for {
+		timeout := time.After(15 * time.Minute)
 		podLogRequest := clientset.CoreV1().Pods(namespace).GetLogs(podName, &podLogOptions)
 		stream, err := podLogRequest.Stream(ctx)
 		if err != nil {
@@ -125,25 +126,27 @@ func watchPodLogs(ctx context.Context, podName string, containerName string, log
 			return
 		}
 
-		reader := bufio.NewScanner(stream)
-		for reader.Scan() {
-			select {
-			case <-ctx.Done():
-				logger.Sugar().Infof("Log scanner %s/%s closed due context cancel", podName, containerName)
-				if err = stream.Close(); err != nil {
-					logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
-				}
-				return
-			default:
-				text := reader.Text()
-				logChannel <- text
+		go func() {
+			reader := bufio.NewScanner(stream)
+			for reader.Scan() {
+				logChannel <- reader.Text()
 			}
+		}()
+
+		select {
+		case <-ctx.Done():
+			logger.Sugar().Infof("Log scanner %s/%s closed due context cancel", podName, containerName)
+			if err = stream.Close(); err != nil {
+				logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
+			}
+			return
+		case <-timeout:
+			break
 		}
 
 		if err = stream.Close(); err != nil {
 			logger.Sugar().Errorf("Log scanner %s/%s get error while podLogRequest.Stream close: %v", podName, containerName, err)
 		}
-		time.Sleep(1 * time.Second)
 	}
 }
 
