@@ -1,0 +1,61 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-counter-serviceaccount
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nginx-counter-sa-readonly
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: nginx-counter-serviceaccount
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: counter
+  labels:
+    app: nginx-counter
+spec:
+  selector:
+    app: nginx-counter
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: counter
+  labels:
+    app: nginx-counter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-counter
+  template:
+    metadata:
+      labels:
+        app: nginx-counter
+    spec:
+      serviceAccountName: nginx-counter-serviceaccount
+      containers:
+      - name: nginx-counter
+        image: nginx-ingress-counter
+        env:
+          - name: INGRESSNAMESPACE
+            value: default
+          - name: INGRESSPODNAME
+            value: nginx-ingress
+          - name: LOGLEVEL
+            value: debug
