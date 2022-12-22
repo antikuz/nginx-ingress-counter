@@ -4,13 +4,13 @@ WORKDIR /build
 
 COPY . ./
 RUN go mod download \
- && go build -o test
+ && go build -o nginx-ingress-counter
 
 
 FROM alpine:3.16
 
 WORKDIR /app
 
-COPY --from=builder /build/test ./test
+COPY --from=builder /build/nginx-ingress-counter ./nginx-ingress-counter
 
-ENTRYPOINT ["/app/test"]
+ENTRYPOINT ["/app/nginx-ingress-counter"]
