@@ -1,5 +1,5 @@
 # Nginx ingress counter (exporter)
-Exporter counting the number of connections in kubernetes ingress nginx
+Exporter counting the number of connections in kubernetes ingress nginx and provides prometheus-like metrics on `:8080/metrics`
 
 ## Install
 ```
